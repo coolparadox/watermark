@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -e
+set -x
+
+INPUT_FILE='sample.jpg'
+
+SOURCE_W=$( identify -format '%w' $INPUT_FILE )
+SOURCE_H=$( identify -format '%h' $INPUT_FILE )
+
+# Generate tile unit
+
+LABEL='www.
+coolparadox
+.com'
+FONT='Arial'
+POINTSIZE_MIN=20
+
+POINTSIZE=$((SOURCE_H / 30))
+test $POINTSIZE -ge $POINTSIZE_MIN || POINTSIZE=$POINTSIZE_MIN
+
+TILE_W=$((100*POINTSIZE))
+TILE_H=$((10*POINTSIZE))
+
+convert \
+	-size ${TILE_W}x${TILE_H} \
+	xc:grey30 \
+	-font "$FONT" \
+	-pointsize $POINTSIZE \
+	-gravity center \
+	-draw "fill grey70 text 0,0 '${LABEL}'" \
+	tile_fgnd.png
+
+convert \
+	-size ${TILE_W}x${TILE_H} \
+	xc:black \
+	-font "$FONT" \
+	-pointsize $POINTSIZE \
+	-gravity center \
+	-draw \
+		"fill white text 1,1 '${LABEL}' \
+		text 0,0 '${LABEL}' \
+		fill black text -1,-1 '${LABEL}'" \
++matte tile_mask.png
+composite -compose CopyOpacity tile_mask.png tile_fgnd.png tile.png
+mogrify -trim +repage tile.png
+TILE_W=$( identify -format '%w' tile.png )
+TILE_H=$( identify -format '%h' tile.png )
+
+# Generate watermark background
+
+convert \
+	tile.png \
+	-set \
+		option:distort:viewport \
+		${SOURCE_W}x${SOURCE_H}-$((SOURCE_W/2 - TILE_W/2))-$((SOURCE_H/2 - TILE_H/2)) \
+	-background transparent \
+	-virtual-pixel CheckerTile \
+	-distort SRT 0 \
+	+repage \
+	mark.png
+
+# Compose watermarked image
+
+composite \
+	-dissolve 20% \
+	-gravity center \
+	mark.png $INPUT_FILE \
+	result.jpg
