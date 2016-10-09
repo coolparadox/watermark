@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-set -x
 
 INPUT_FILE='sample.jpg'
 
@@ -15,13 +14,11 @@ coolparadox
 .com'
 FONT='Arial'
 POINTSIZE_MIN=20
-
 POINTSIZE=$((SOURCE_H / 30))
 test $POINTSIZE -ge $POINTSIZE_MIN || POINTSIZE=$POINTSIZE_MIN
-
 TILE_W=$((100*POINTSIZE))
 TILE_H=$((10*POINTSIZE))
-
+TILE_FGND_FILE=$( mktemp XXXXXXXXXX.png )
 convert \
 	-size ${TILE_W}x${TILE_H} \
 	xc:grey30 \
@@ -29,8 +26,8 @@ convert \
 	-pointsize $POINTSIZE \
 	-gravity center \
 	-draw "fill grey70 text 0,0 '${LABEL}'" \
-	tile_fgnd.png
-
+	$TILE_FGND_FILE
+TILE_MASK_FILE=$( mktemp XXXXXXXXXX.png )
 convert \
 	-size ${TILE_W}x${TILE_H} \
 	xc:black \
@@ -41,29 +38,36 @@ convert \
 		"fill white text 1,1 '${LABEL}' \
 		text 0,0 '${LABEL}' \
 		fill black text -1,-1 '${LABEL}'" \
-+matte tile_mask.png
-composite -compose CopyOpacity tile_mask.png tile_fgnd.png tile.png
-mogrify -trim +repage tile.png
-TILE_W=$( identify -format '%w' tile.png )
-TILE_H=$( identify -format '%h' tile.png )
+	+matte \
+	$TILE_MASK_FILE
+TILE_FILE=$( mktemp XXXXXXXXXX.png )
+composite -compose CopyOpacity $TILE_MASK_FILE $TILE_FGND_FILE $TILE_FILE
+rm -r $TILE_FGND_FILE $TILE_MASK_FILE
+mogrify -trim +repage $TILE_FILE
+TILE_W=$( identify -format '%w' $TILE_FILE )
+TILE_H=$( identify -format '%h' $TILE_FILE )
 
 # Generate watermark background
 
+MARK_FILE=$( mktemp XXXXXXXXXX.png )
 convert \
-	tile.png \
+	$TILE_FILE \
 	-set \
 		option:distort:viewport \
-		${SOURCE_W}x${SOURCE_H}-$((SOURCE_W/2 - TILE_W/2))-$((SOURCE_H/2 - TILE_H/2)) \
+		${SOURCE_W}x${SOURCE_H}-$((SOURCE_W/2-TILE_W/2))-$((SOURCE_H/2-TILE_H/2)) \
 	-background transparent \
 	-virtual-pixel CheckerTile \
 	-distort SRT 0 \
 	+repage \
-	mark.png
+	$MARK_FILE
+rm -f $TILE_FILE
 
 # Compose watermarked image
 
 composite \
 	-dissolve 20% \
 	-gravity center \
-	mark.png $INPUT_FILE \
+	$MARK_FILE $INPUT_FILE \
 	result.jpg
+rm -f $MARK_FILE
+
