@@ -1,24 +1,168 @@
 #!/bin/bash
 
 set -e
+set -u
 
-INPUT_FILE='sample.jpg'
+VERSION=0
+
+DEFAULT_LABEL='www.\ncoolparadox\n.com'
+DEFAULT_FONT='Arial'
+
+# Parse command line arguments
+
+ME=$( basename "$0" )
+
+USAGE_LINE="${ME} [-h | --help | OPTIONS] [<input file>]"
+
+usage() {
+
+	echo "usage: $USAGE_LINE" 1>&2
+	exit 1
+
+}
+
+help() {
+
+	cat <<-__eod__
+		$USAGE_LINE
+
+		Watermarks an image with a textual label.
+
+		Options:
+		  -h, --help          This help text.
+		  -l, --label LABEL   Textual label to be used for watermarking.
+		  -o, --output FILE   Output file.
+		  -v, --version       Version information.
+
+		Output file name is the same as input with '_watermarked' appended.
+		If input file is '-' or absent, reads from stdin and writes to stdout.
+		If output file is '-', writes to stdout.
+
+		LABEL defaults to '$DEFAULT_LABEL'.
+
+		This script requires ImageMagick <www.imagemagick.org> tools.
+
+		Please file bug reports to:
+		http://github.com/coolparadox/watermark/issues
+	__eod__
+	exit 0
+
+}
+
+version() {
+	cat <<-__eod__
+		${ME} version $VERSION
+		
+		Copyright (C) 2016  www.coolparadox.com
+		License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+		This program comes with ABSOLUTELY NO WARRANTY.
+		This is free software, and you are welcome to redistribute it
+		under certain conditions; see License for details.
+	__eod__
+	exit 0
+}
+
+fail() {
+	echo "${ME}: error: $*" 1>&2
+	exit 1
+}
+
+INPUT_FILE='-'
+OUTPUT_FILE=''
+LABEL=$DEFAULT_LABEL
+while test $# -gt 0 ; do
+	OPT=$1
+	case $OPT in
+
+	-h|--help) help ;;
+
+	-v|--version) version ;;
+
+	-l|--label)
+		shift
+		test $# -gt 0 || fail "missing label"
+		LABEL=$1
+		shift
+		;;
+
+	-l=*)
+		LABEL=${OPT#-l=}
+		shift
+		;;
+
+	--label=*)
+		LABEL=${OPT#--label=}
+		shift
+		;;
+
+	-o|--output)
+		shift
+		test $# -gt 0 || fail "missing output file name"
+		OUTPUT_FILE=$1
+		shift
+		;;
+
+	-o=*)
+		OUTPUT_FILE=${OPT#-o=}
+		shift
+		;;
+
+	--output=*)
+		OUTPUT_FILE=${OPT#--output=}
+		shift
+		;;
+
+	-) break ;;
+
+	-*) usage ;;
+
+	*) break ;;
+
+	esac
+done
+test $# -eq 0 || {
+	INPUT_FILE="$1"
+	test -n "$INPUT_FILE" || fail "missing input file"
+	shift
+}
+test $# -eq 0 || fail "too many arguments"
+
+test "$INPUT_FILE" != '-' || INPUT_FILE=''
+test -z "$INPUT_FILE" -o -n "$OUTPUT_FILE" || {
+	OUTPUT_DIR=$( dirname "$INPUT_FILE" )
+	OUTPUT_BASE=$( basename "$INPUT_FILE" )
+	OUTPUT_NAME=${OUTPUT_BASE/.*/}
+	OUTPUT_EXTENSION=${OUTPUT_BASE/*\./.}
+	test "$OUTPUT_NAME" != "$OUTPUT_EXTENSION" || OUTPUT_EXTENSION=''
+	OUTPUT_FILE="$OUTPUT_DIR/${OUTPUT_NAME}_watermarked$OUTPUT_EXTENSION"
+}
+test "$OUTPUT_FILE" != '-' || OUTPUT_FILE=''
+RM_IN=''
+test -n "$INPUT_FILE" || {
+	INPUT_FILE=$( mktemp )
+	RM_IN="rm -f $INPUT_FILE"
+	cat 1>$INPUT_FILE
+}
+RM_OUT=''
+CAT_OUT=''
+test -n "$OUTPUT_FILE" || {
+	OUTPUT_FILE=$( mktemp )
+	RM_OUT="rm -f $OUTPUT_FILE"
+	CAT_OUT="cat $OUTPUT_FILE"
+}
+
+# Generate watermark unit
 
 SOURCE_W=$( identify -format '%w' $INPUT_FILE )
 SOURCE_H=$( identify -format '%h' $INPUT_FILE )
-
-# Generate tile unit
-
-LABEL='www.
-coolparadox
-.com'
-FONT='Arial'
+FONT=$DEFAULT_FONT
 POINTSIZE_MIN=20
 POINTSIZE=$((SOURCE_H / 30))
 test $POINTSIZE -ge $POINTSIZE_MIN || POINTSIZE=$POINTSIZE_MIN
 TILE_W=$((100*POINTSIZE))
 TILE_H=$((10*POINTSIZE))
-TILE_FGND_FILE=$( mktemp XXXXXXXXXX.png )
+TILE_FGND_FILE=$( mktemp )
+LABEL=$( echo -e "$LABEL" )
 convert \
 	-size ${TILE_W}x${TILE_H} \
 	xc:grey30 \
@@ -26,8 +170,8 @@ convert \
 	-pointsize $POINTSIZE \
 	-gravity center \
 	-draw "fill grey70 text 0,0 '${LABEL}'" \
-	$TILE_FGND_FILE
-TILE_MASK_FILE=$( mktemp XXXXXXXXXX.png )
+	png:$TILE_FGND_FILE
+TILE_MASK_FILE=$( mktemp )
 convert \
 	-size ${TILE_W}x${TILE_H} \
 	xc:black \
@@ -39,8 +183,8 @@ convert \
 		text 0,0 '${LABEL}' \
 		fill black text -1,-1 '${LABEL}'" \
 	+matte \
-	$TILE_MASK_FILE
-TILE_FILE=$( mktemp XXXXXXXXXX.png )
+	png:$TILE_MASK_FILE
+TILE_FILE=$( mktemp )
 composite -compose CopyOpacity $TILE_MASK_FILE $TILE_FGND_FILE $TILE_FILE
 rm -r $TILE_FGND_FILE $TILE_MASK_FILE
 mogrify -trim +repage $TILE_FILE
@@ -49,7 +193,7 @@ TILE_H=$( identify -format '%h' $TILE_FILE )
 
 # Generate watermark background
 
-MARK_FILE=$( mktemp XXXXXXXXXX.png )
+MARK_FILE=$( mktemp )
 convert \
 	$TILE_FILE \
 	-set \
@@ -68,6 +212,9 @@ composite \
 	-dissolve 20% \
 	-gravity center \
 	$MARK_FILE $INPUT_FILE \
-	result.jpg
+	$OUTPUT_FILE
+$RM_IN
 rm -f $MARK_FILE
+$CAT_OUT
+$RM_OUT
 
