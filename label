@@ -4,9 +4,9 @@ set -e
 set -u
 
 VERSION=0
-OUT_SUFFIX='_watermarked'
+OUT_SUFFIX='_labeled'
 
-DEFAULT_LABEL='www.\ncoolparadox\n.com'
+DEFAULT_LABEL='www.coolparadox.com'
 DEFAULT_FONT='Arial'
 
 # Parse command line arguments
@@ -27,11 +27,11 @@ help() {
 	cat <<-__eod__
 		$USAGE_LINE
 
-		Watermarks an image with a textual label.
+		Labels an image at the bottom with a textual line.
 
 		Options:
 		  -h, --help          This help text.
-		  -l, --label LABEL   Textual label to be used for watermarking.
+		  -l, --label LABEL   Text label to be used for labeling.
 		  -o, --output FILE   Output file.
 		  -v, --version       Version information.
 
@@ -164,58 +164,19 @@ TILE_W=$((100*POINTSIZE))
 TILE_H=$((10*POINTSIZE))
 TILE_FGND_FILE=$( mktemp )
 LABEL=$( echo -e "$LABEL" )
+
+# Label image at bottom
+
 convert \
-	-size ${TILE_W}x${TILE_H} \
-	xc:grey30 \
-	-font "$FONT" \
+	$INPUT_FILE \
+	-font $FONT \
 	-pointsize $POINTSIZE \
-	-gravity center \
-	-draw "fill grey70 text 0,0 '${LABEL}'" \
-	png:$TILE_FGND_FILE
-TILE_MASK_FILE=$( mktemp )
-convert \
-	-size ${TILE_W}x${TILE_H} \
-	xc:black \
-	-font "$FONT" \
-	-pointsize $POINTSIZE \
-	-gravity center \
 	-draw \
-		"fill white text 1,1 '${LABEL}' \
-		text 0,0 '${LABEL}' \
-		fill black text -1,-1 '${LABEL}'" \
-	+matte \
-	png:$TILE_MASK_FILE
-TILE_FILE=$( mktemp )
-composite -compose CopyOpacity $TILE_MASK_FILE $TILE_FGND_FILE $TILE_FILE
-rm -r $TILE_FGND_FILE $TILE_MASK_FILE
-mogrify -trim +repage $TILE_FILE
-TILE_W=$( identify -format '%w' $TILE_FILE )
-TILE_H=$( identify -format '%h' $TILE_FILE )
-
-# Generate watermark background
-
-MARK_FILE=$( mktemp )
-convert \
-	$TILE_FILE \
-	-set \
-		option:distort:viewport \
-		${SOURCE_W}x${SOURCE_H}-$((SOURCE_W/2-TILE_W/2))-$((SOURCE_H/2-TILE_H/2)) \
-	-background transparent \
-	-virtual-pixel CheckerTile \
-	-distort SRT 0 \
-	+repage \
-	$MARK_FILE
-rm -f $TILE_FILE
-
-# Compose watermarked image
-
-composite \
-	-dissolve 20% \
-	-gravity center \
-	$MARK_FILE $INPUT_FILE \
+		"gravity south \
+		fill black  text 0,12 '${LABEL}' \
+		fill white  text 1,11 '${LABEL}' " \
 	$OUTPUT_FILE
 $RM_IN
-rm -f $MARK_FILE
 $CAT_OUT
 $RM_OUT
 
