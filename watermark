@@ -8,6 +8,7 @@ OUT_SUFFIX='_watermarked'
 
 DEFAULT_LABEL='www.\ncoolparadox\n.com'
 DEFAULT_FONT='Arial'
+DEFAULT_ALPHA=12
 
 # Parse command line arguments
 
@@ -31,6 +32,7 @@ help() {
 
 		Options:
 		  -h, --help          This help text.
+		  -a, --alpha A%      Alpha factor of the watermark in percentage.
 		  -l, --label LABEL   Textual label to be used for watermarking.
 		  -o, --output FILE   Output file.
 		  -v, --version       Version information.
@@ -40,6 +42,7 @@ help() {
 		If output file is '-', writes to stdout.
 
 		LABEL defaults to '$DEFAULT_LABEL'.
+		A% defaults to 10.
 
 		This script requires ImageMagick <www.imagemagick.org> tools.
 
@@ -71,6 +74,7 @@ fail() {
 INPUT_FILE='-'
 OUTPUT_FILE=''
 LABEL=$DEFAULT_LABEL
+ALPHA=$DEFAULT_ALPHA
 while test $# -gt 0 ; do
 	OPT=$1
 	case $OPT in
@@ -78,6 +82,23 @@ while test $# -gt 0 ; do
 	-h|--help) help ;;
 
 	-v|--version) version ;;
+
+	-a|--alpha)
+		shift
+		test $# -gt 0 || fail "missing alpha"
+		ALPHA=$1
+		shift
+		;;
+
+	-a=*)
+		ALPHA=${OPT#-a=}
+		shift
+		;;
+
+	--alpha=*)
+		ALPHA=${OPT#--alpha=}
+		shift
+		;;
 
 	-l|--label)
 		shift
@@ -210,7 +231,7 @@ rm -f $TILE_FILE
 # Compose watermarked image
 
 composite \
-	-dissolve 20% \
+	-dissolve ${ALPHA}% \
 	-gravity center \
 	$MARK_FILE $INPUT_FILE \
 	$OUTPUT_FILE

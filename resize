@@ -5,7 +5,7 @@ set -u
 
 VERSION=0
 OUT_SUFFIX='_resized'
-DEFAULT_MAX_DIM=300
+DEFAULT_MAX_DIM=480
 
 # Parse command line arguments
 
