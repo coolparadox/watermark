@@ -5,5 +5,4 @@ These are small ImageMagick based scripts I wrote for processing my own images t
 
 See more details at:
 
-https://github.com/coolparadox/watermark/wiki/Watermark
-
+https://github.com/coolparadox/watermark/wiki
