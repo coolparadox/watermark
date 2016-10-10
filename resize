@@ -5,7 +5,7 @@ set -u
 
 VERSION=0
 OUT_SUFFIX='_resized'
-MAX_DIM=300
+DEFAULT_MAX_DIM=300
 
 # Parse command line arguments
 
@@ -30,11 +30,14 @@ help() {
 		Options:
 		  -h, --help          This help text.
 		  -o, --output FILE   Output file.
+		  -m, --maximum DIM   Use DIM as maximum dimension in pixels.
 		  -v, --version       Version information.
 
 		Output file name is the same as input with '${OUT_SUFFIX}' appended.
 		If input file is '-' or absent, reads from stdin and writes to stdout.
 		If output file is '-', writes to stdout.
+
+		DIM defaults to $DEFAULT_MAX_DIM pixels.
 
 		This script requires ImageMagick <www.imagemagick.org> tools.
 
@@ -65,6 +68,7 @@ fail() {
 
 INPUT_FILE='-'
 OUTPUT_FILE=''
+MAX_DIM=$DEFAULT_MAX_DIM
 while test $# -gt 0 ; do
 	OPT=$1
 	case $OPT in
@@ -72,6 +76,23 @@ while test $# -gt 0 ; do
 	-h|--help) help ;;
 
 	-v|--version) version ;;
+
+	-m|--maximum)
+		shift
+		test $# -gt 0 || fail "missing maximum dimension"
+		MAX_DIM=$1
+		shift
+		;;
+
+	-m=*)
+		MAX_DIM=${OPT#-m=}
+		shift
+		;;
+
+	--maximum=*)
+		MAX_DIM=${OPT#--maximum=}
+		shift
+		;;
 
 	-o|--output)
 		shift
